@@ -1,14 +1,23 @@
 # dsh-header-masq layer.
 #
-# Mounts the host plugin. The plugin mirrors the per-conversation
-# `x-deepseek-harness-session-id` header that the DeepSeek adapter already
-# sends onto headers other harnesses understand.
+# Mounts the host plugin. The plugin exposes a DSH session id to gateways that
+# expect a harness-specific session header.
+#
+# Why the fallback exists: `@deepseek-ai/dsh-llm-deepseek` sends
+# `x-deepseek-harness-session-id`, but `@deepseek-ai/dsh-llm-pi-ai` — the
+# adapter used by custom / third-party model providers — does not implement the
+# DeepSeek wire extensions at all. For those routes the plugin reads the live
+# `GenerateOptions.sessionId` from the `llm/stream` waterfall instead.
 #
 # Row config (all optional):
-#   source:  header to read. Defaults to x-deepseek-harness-session-id.
-#   targets: headers to set from it. Defaults to [x-opencode-session].
-#            Add e.g. another harness header here without touching the code.
-#   debug:   true logs every request the mapping was applied to.
+#   source:               header to read first. Defaults to
+#                         x-deepseek-harness-session-id.
+#   targets:              headers to set. Defaults to [x-opencode-session].
+#   fallbackToSessionId:  when the source header is absent, use the model
+#                         call's sessionId. Defaults to true.
+#   hosts:                optional host allow-list for the fallback (e.g.
+#                         [opencode.ai]). Empty means every host.
+#   debug:                true logs every applied mapping.
 - insert:
     - id: header-masq
       name: dsh-header-masq
@@ -16,4 +25,5 @@
         source: x-deepseek-harness-session-id
         targets:
           - x-opencode-session
+        fallbackToSessionId: true
         debug: false

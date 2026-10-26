@@ -1,7 +1,7 @@
 {
   "name": "dsh-header-masq",
-  "version": "0.1.0",
-  "description": "DeepSeek Harness 0.2.1-rc.2 plugin that mirrors x-deepseek-harness-session-id into x-opencode-session (and other harness headers).",
+  "version": "0.2.0",
+  "description": "DeepSeek Harness 0.2.1-rc.2 plugin that exposes a session id as x-opencode-session (and other harness headers), with a fallback for custom pi-ai providers.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
