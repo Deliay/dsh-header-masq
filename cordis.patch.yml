@@ -3,20 +3,21 @@
 # Mounts the host plugin. The plugin exposes a DSH session id to gateways that
 # expect a harness-specific session header.
 #
-# Why the fallback exists: `@deepseek-ai/dsh-llm-deepseek` sends
-# `x-deepseek-harness-session-id`, but `@deepseek-ai/dsh-llm-pi-ai` — the
-# adapter used by custom / third-party model providers — does not implement the
-# DeepSeek wire extensions at all. For those routes the plugin reads the live
-# `GenerateOptions.sessionId` from the `llm/stream` waterfall instead.
+# The canonical value is the durable `GenerateOptions.sessionId` of the model
+# call: every request of one Session uses the same value, and a new Session
+# uses a new one. `@deepseek-ai/dsh-llm-deepseek` also sends that value as
+# `x-deepseek-harness-session-id`; `@deepseek-ai/dsh-llm-pi-ai` (custom /
+# third-party model providers) does not. The source header is therefore the
+# fallback for calls that have no live session id.
 #
 # Row config (all optional):
-#   source:               header to read first. Defaults to
-#                         x-deepseek-harness-session-id.
+#   source:               header to read when no live session id exists.
+#                         Defaults to x-deepseek-harness-session-id.
 #   targets:              headers to set. Defaults to [x-opencode-session].
-#   fallbackToSessionId:  when the source header is absent, use the model
-#                         call's sessionId. Defaults to true.
-#   hosts:                optional host allow-list for the fallback (e.g.
-#                         [opencode.ai]). Empty means every host.
+#   fallbackToSessionId:  use the model call's sessionId as the canonical
+#                         fixed value. Defaults to true.
+#   hosts:                optional host allow-list (e.g. [opencode.ai]).
+#                         Empty means every host.
 #   debug:                true logs every applied mapping.
 - insert:
     - id: header-masq

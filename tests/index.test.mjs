@@ -136,14 +136,29 @@ test('falls back to the LLM call sessionId when the source header is absent', ()
   assert.equal(headers?.get('x-opencode-session'), SOURCE)
 })
 
-test('the source header wins over the fallback sessionId', () => {
+test('the live sessionId is canonical and wins over a differing source header', () => {
   const headers = mapSessionHeaders(
     'https://example.test',
     { headers: { [SOURCE_HEADER]: 'from-header' } },
     resolveConfig(),
     'from-options',
   )
-  assert.equal(headers?.get('x-opencode-session'), 'from-header')
+  assert.equal(headers?.get('x-opencode-session'), 'from-options')
+})
+
+test('one session keeps one fixed value and a new session gets a new value', () => {
+  const config = resolveConfig()
+  const input = 'https://custom.example/v1/chat/completions'
+  const first = mapSessionHeaders(input, undefined, config, 'session-a')
+  const second = mapSessionHeaders(input, undefined, config, 'session-a')
+  const other = mapSessionHeaders(input, undefined, config, 'session-b')
+  assert.equal(first?.get('x-opencode-session'), 'session-a')
+  assert.equal(second?.get('x-opencode-session'), 'session-a')
+  assert.equal(other?.get('x-opencode-session'), 'session-b')
+  assert.notEqual(
+    first?.get('x-opencode-session'),
+    other?.get('x-opencode-session'),
+  )
 })
 
 test('does not use an unsafe fallback header value', () => {
@@ -152,19 +167,24 @@ test('does not use an unsafe fallback header value', () => {
   assert.equal(mapSessionHeaders('https://example.test', undefined, config, ''), null)
 })
 
-test('host allow-list only limits the fallback, not an explicit source header', () => {
+test('an explicit host allow-list limits every mapping', () => {
   const config = resolveConfig({ hosts: ['opencode.ai'] })
   assert.equal(targetsAllowedHost('https://opencode.ai/zen/go/v1/chat/completions', config.hosts), true)
   assert.equal(targetsAllowedHost('https://other.example/v1/chat/completions', config.hosts), false)
-  // Fallback: blocked on other hosts.
   assert.equal(mapSessionHeaders('https://other.example/v1/chat', undefined, config, SOURCE), null)
-  // Explicit source header: still copied.
-  const headers = mapSessionHeaders(
-    'https://other.example/v1/chat',
-    { headers: { [SOURCE_HEADER]: SOURCE } },
-    config,
+  assert.equal(
+    mapSessionHeaders(
+      'https://other.example/v1/chat',
+      { headers: { [SOURCE_HEADER]: SOURCE } },
+      config,
+    ),
+    null,
   )
-  assert.equal(headers?.get('x-opencode-session'), SOURCE)
+  assert.equal(
+    mapSessionHeaders('https://opencode.ai/zen/go/v1/chat', undefined, config, SOURCE)
+      ?.get('x-opencode-session'),
+    SOURCE,
+  )
 })
 
 test('withStore runs downstream pulls inside the store', async () => {
@@ -234,6 +254,39 @@ test('apply installs the fetch patch + stream hook and restores both on dispose'
     assert.equal(globalThis.fetch, replacement)
     assert.equal(listeners.has('llm/stream'), false)
   } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('apply keeps one ssid per session across turns and rotates it for a new session', async () => {
+  const originalFetch = globalThis.fetch
+  const replacement = fakeOriginal()
+  globalThis.fetch = replacement
+  const { ctx, listeners, cleanups } = makeCtx()
+  try {
+    apply(ctx, {})
+    const listener = listeners.get('llm/stream')
+    const run = async (sessionId) => {
+      const downstream = {
+        async *[Symbol.asyncIterator]() {
+          yield await globalThis.fetch('https://custom.example/v1/chat', {
+            headers: { accept: 'application/json' },
+          })
+        },
+      }
+      await listener({ sessionId }, () => downstream)[Symbol.asyncIterator]().next()
+    }
+
+    await run('session-a')
+    await run('session-a')
+    await run('session-b')
+
+    const values = replacement.calls.map(([, init]) => (
+      new Headers(init.headers).get('x-opencode-session')
+    ))
+    assert.deepEqual(values, ['session-a', 'session-a', 'session-b'])
+  } finally {
+    cleanups[0]?.()
     globalThis.fetch = originalFetch
   }
 })

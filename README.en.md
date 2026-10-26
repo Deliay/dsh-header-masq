@@ -24,20 +24,37 @@ wire-extension headers exist only in `dsh-llm-deepseek`. So for a **custom model
 provider** the header is absent, not present with an empty value. Direct calls
 without a Session omit it too.
 
-The plugin therefore supports a **sessionId fallback**: inside the
-`llm/stream` window, if the outgoing request has no source header (or an empty
-one), the call's `GenerateOptions.sessionId` is used. That means:
+The plugin therefore uses **`GenerateOptions.sessionId` from `llm/stream` as
+the canonical value**:
 
-- DeepSeek adapter: the existing `x-deepseek-harness-session-id` wins.
-- Custom provider / pi-ai: the same DSH session id is used as a fallback.
-- Ordinary HTTP requests outside the stream window are untouched.
+- It is the durable DSH Session id, so the main conversation, title
+  generation, compaction, and retries of one session all use the same value.
+- Custom providers / pi-ai that lack `x-deepseek-harness-session-id` use it
+  directly.
+- A new DSH session gets a new Session id, so the ssid changes automatically.
+- The source header is read only when no live session id is available (for
+  example a call outside a model stream).
+
+### Stability guarantee
+
+| Case | `x-opencode-session` |
+|---|---|
+| Turns 1, 2, N of the same session | exactly the same |
+| Title generation / compaction / retry in the same session | exactly the same |
+| Custom provider vs DeepSeek adapter in the same session | exactly the same |
+| A different session | a new, different value |
+| Continuing the same session after a restart | still the same (durable Session id, not random) |
+
+The plugin never generates a new id per request and never shares one fixed id
+across sessions.
 
 ## Behavior
 
-- Reads the value of `x-deepseek-harness-session-id`.
-- Sets `x-opencode-session` to that value, overwriting an existing target.
-- Falls back to the model call's `sessionId` when the source header is absent
-  and `fallbackToSessionId` is enabled.
+- Inside a model stream, writes the call's durable `sessionId` to
+  `x-opencode-session`.
+- Without a live `sessionId`, reads `x-deepseek-harness-session-id` and writes
+  the same value.
+- Overwrites an existing target so a stale session value cannot survive.
 - Handles `Headers`, plain objects, and `Request` inputs.
 - Restores the original `fetch` and removes the `llm/stream` listener on unload.
 
@@ -64,10 +81,10 @@ The inserted `header-masq` row (see `cordis.patch.yml`) accepts:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `source` | `x-deepseek-harness-session-id` | header to read first |
+| `source` | `x-deepseek-harness-session-id` | header to read when no live session id exists |
 | `targets` | `[x-opencode-session]` | headers to set |
-| `fallbackToSessionId` | `true` | use `llm/stream`'s `sessionId` when the source header is absent |
-| `hosts` | `[]` | optional allow-list for the fallback; empty means every host |
+| `fallbackToSessionId` | `true` | use `llm/stream`'s `sessionId` as the canonical fixed value |
+| `hosts` | `[]` | optional target host allow-list; empty means every host |
 | `debug` | `false` | log every applied mapping |
 
 ```yaml

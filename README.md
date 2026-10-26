@@ -24,19 +24,32 @@ wire extension 头只由 `dsh-llm-deepseek` 实现。因此“自定义模型厂
 **没有这个头**（而不是有空值）。另外，没有 Session 的直接调用（例如某些一次性
 请求）也不会带这个头。
 
-所以插件提供了 **sessionId 回退**：在 `llm/stream` 的调用窗口内，如果出站请求
-没有源头（或源头值为空），就直接使用该次模型调用的 `GenerateOptions.sessionId`。这样：
+所以插件以 **`llm/stream` 的 `GenerateOptions.sessionId` 作为规范值**：
 
-- DeepSeek 适配器：优先使用已有的 `x-deepseek-harness-session-id`；
-- 自定义厂商 / pi-ai：自动回退到同一个 DSH session id；
-- 窗口之外的普通 HTTP 请求不会被注入。
+- 它是持久化的 DSH Session id，同一 session 的主对话、标题生成、压缩、重试
+  都是同一个值；
+- 自定义厂商 / pi-ai 没有 `x-deepseek-harness-session-id` 时，直接使用它；
+- 切换到新 session 时，DSH 会给出新的 Session id，因此 ssid 自动变化；
+- 只有在拿不到活动 session id 时（例如模型流之外的调用），才回退去读
+  `x-deepseek-harness-session-id`。
+
+### 固定性保证
+
+| 场景 | `x-opencode-session` |
+|---|---|
+| 同一 session 的第 1、2、N 轮对话 | 完全相同 |
+| 同一 session 的标题生成 / 压缩 / 重试 | 完全相同 |
+| 同一 session 自定义厂商 vs DeepSeek 适配器 | 完全相同 |
+| 新建另一个 session | 新的、不同的值 |
+| 进程重启后继续同一 session | 仍然相同（用的是持久化 Session id，不是随机数） |
+
+插件不会“每次请求生成一个新 id”，也不会给所有 session 共用一个固定值。
 
 ## 行为
 
-- 读取 `x-deepseek-harness-session-id` 的值。
-- 把 `x-opencode-session` 设置为同一个值；目标头已存在时会被覆盖。
-- 源头不存在时，若处于模型调用流中且 `fallbackToSessionId: true`，使用该次调用的
-  `sessionId`。
+- 在模型调用流中，把该次调用的持久化 `sessionId` 写入 `x-opencode-session`。
+- 拿不到活动 `sessionId` 时，读取 `x-deepseek-harness-session-id` 并写入同一个值。
+- 目标头已存在时会被覆盖，避免残留旧 session 的值。
 - 支持 `Headers`、普通对象、`Request` 三种 `fetch` 入参形式。
 - 插件卸载时恢复原始 `fetch` 和 `llm/stream` 监听；不会覆盖之后安装的其他补丁。
 
@@ -62,13 +75,13 @@ dsh plugin --profile web add github:Deliay/dsh-header-masq
 
 | 键 | 默认值 | 说明 |
 |---|---|---|
-| `source` | `x-deepseek-harness-session-id` | 优先读取的请求头 |
+| `source` | `x-deepseek-harness-session-id` | 没有活动 sessionId 时读取的请求头 |
 | `targets` | `[x-opencode-session]` | 要写入的请求头列表 |
-| `fallbackToSessionId` | `true` | 源头不存在时回退到 `llm/stream` 的 `sessionId` |
-| `hosts` | `[]` | 可选的回退目标主机白名单；空表示所有主机 |
+| `fallbackToSessionId` | `true` | 使用 `llm/stream` 的 `sessionId` 作为固定规范值 |
+| `hosts` | `[]` | 可选的目标主机白名单；空表示所有主机 |
 | `debug` | `false` | 每次应用映射时写一条 info 日志 |
 
-例如只对 OpenCode Go 主机回退，并同时写多个头：
+例如只对 OpenCode Go 主机生效，并同时写多个头：
 
 ```yaml
 - insert:
