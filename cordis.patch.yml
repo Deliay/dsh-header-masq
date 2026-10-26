@@ -1,0 +1,19 @@
+# dsh-header-masq layer.
+#
+# Mounts the host plugin. The plugin mirrors the per-conversation
+# `x-deepseek-harness-session-id` header that the DeepSeek adapter already
+# sends onto headers other harnesses understand.
+#
+# Row config (all optional):
+#   source:  header to read. Defaults to x-deepseek-harness-session-id.
+#   targets: headers to set from it. Defaults to [x-opencode-session].
+#            Add e.g. another harness header here without touching the code.
+#   debug:   true logs every request the mapping was applied to.
+- insert:
+    - id: header-masq
+      name: dsh-header-masq
+      config:
+        source: x-deepseek-harness-session-id
+        targets:
+          - x-opencode-session
+        debug: false
