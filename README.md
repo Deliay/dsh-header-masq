@@ -112,6 +112,36 @@ npm test
 npm run check
 ```
 
+## 发布到 npm
+
+`.github/workflows/publish.yml` 会在以下时机运行语法检查、测试并发布：
+
+- 手动触发 `workflow_dispatch`
+- push 到 `release` 或 `release/**` 分支
+
+发布命令为 `npm publish --access public --provenance`，使用 npm Trusted Publishing
+（OIDC），不需要在仓库里保存 `NPM_TOKEN`。
+
+首次发布前需要在 npm 包设置里配置 Trusted Publisher：
+
+| 项 | 值 |
+|---|---|
+| Provider | GitHub Actions |
+| Repository | `Deliay/dsh-header-masq` |
+| Workflow | `publish.yml` |
+| Environment | 留空 |
+
+发布流程：
+
+```sh
+# 先更新 package.json 的 version
+git checkout -b release
+git push origin release
+```
+
+也可以在 GitHub Actions 页面手动运行 `Publish dsh-header-masq to npm`。
+同一个版本不能重复发布，请先修改 `version`。
+
 ## 许可
 
 MIT

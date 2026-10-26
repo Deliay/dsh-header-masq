@@ -34,6 +34,17 @@
     "session-affinity"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Deliay/dsh-header-masq.git"
+  },
+  "homepage": "https://github.com/Deliay/dsh-header-masq#readme",
+  "bugs": {
+    "url": "https://github.com/Deliay/dsh-header-masq/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dsh": {
     "compatibility": {
       "node": ">=20",

@@ -1,0 +1,50 @@
+name: Publish dsh-header-masq to npm
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release
+      - 'release/**'
+    paths:
+      - 'lib/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'cordis.patch.yml'
+      - 'README.md'
+      - 'README.en.md'
+      - 'LICENSE'
+      - '.github/workflows/publish.yml'
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+# Uses npm Trusted Publishing (OIDC): configure the package's Trusted Publisher
+# for this repository and workflow before releasing. For a package that does not
+# exist on npm yet, publish the first version manually once, then enable it.
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Syntax check
+        run: npm run check
+
+      - name: Test
+        run: npm test
+
+      - name: Publish
+        run: npm publish --access public --provenance

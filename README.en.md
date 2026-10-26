@@ -116,6 +116,37 @@ npm test
 npm run check
 ```
 
+## Publishing to npm
+
+`.github/workflows/publish.yml` runs the syntax check, tests, then publishes on:
+
+- manual `workflow_dispatch`
+- a push to `release` or `release/**`
+
+It runs `npm publish --access public --provenance` with npm Trusted Publishing
+(OIDC), so no `NPM_TOKEN` secret is stored in the repository.
+
+Configure the Trusted Publisher on the npm package settings before the first
+release:
+
+| Field | Value |
+|---|---|
+| Provider | GitHub Actions |
+| Repository | `Deliay/dsh-header-masq` |
+| Workflow | `publish.yml` |
+| Environment | empty |
+
+Release flow:
+
+```sh
+# bump "version" in package.json first
+git checkout -b release
+git push origin release
+```
+
+You can also run `Publish dsh-header-masq to npm` manually from the Actions
+page. A version can only be published once, so bump `version` first.
+
 ## License
 
 MIT
